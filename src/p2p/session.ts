@@ -1907,14 +1907,17 @@ export class P2PClientProtocol extends TypedEmitter<P2PClientProtocolEvents> {
                 });
               }
             } else {
-              rootP2PLogger.debug(`Handle DATA ${P2PDataType[message.dataType]} - Skipping decryption, data not block-aligned`, {
-                stationSN: this.rawStation.station_sn,
-                seqNo: message.seqNo,
-                commandType: CommandType[message.commandId],
-                signCode: message.signCode,
-                dataLength: message.data.length,
-                mod16: message.data.length % 16,
-              });
+              rootP2PLogger.debug(
+                `Handle DATA ${P2PDataType[message.dataType]} - Skipping decryption, data not block-aligned`,
+                {
+                  stationSN: this.rawStation.station_sn,
+                  seqNo: message.seqNo,
+                  commandType: CommandType[message.commandId],
+                  signCode: message.signCode,
+                  dataLength: message.data.length,
+                  mod16: message.data.length % 16,
+                }
+              );
             }
           }
           return_code = message.data.subarray(0, 4).readUInt32LE() | 0;
@@ -4046,7 +4049,8 @@ export class P2PClientProtocol extends TypedEmitter<P2PClientProtocolEvents> {
           // Keep full raw buffer for ECDH — readNullTerminatedBuffer truncates binary ECIES envelopes at 0x00 bytes
           const rawEncryptedKey = data.subarray(4);
           const encryptedKey = readNullTerminatedBuffer(rawEncryptedKey);
-          const isECDHDevice = this.rawStation.station_sn.startsWith("T8214") || this.rawStation.station_sn.startsWith("T8425");
+          const isECDHDevice =
+            this.rawStation.station_sn.startsWith("T8214") || this.rawStation.station_sn.startsWith("T8425");
           this.api
             .getCipher(/*this.rawStation.station_sn, */ cipherID, this.rawStation.member.admin_user_id)
             .then((cipher) => {

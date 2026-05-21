@@ -752,7 +752,8 @@ let _talkbackTimestamp = 0;
 
 export const resetTalkbackCounters = (): void => {
   _talkbackSeq = 0;
-  _talkbackTimestamp = 0;};
+  _talkbackTimestamp = 0;
+};
 
 export const buildTalkbackAudioFrameHeader = (audioData: Buffer, channel = 0): Buffer => {
   const audioDataLength = Buffer.allocUnsafe(4);
@@ -760,7 +761,7 @@ export const buildTalkbackAudioFrameHeader = (audioData: Buffer, channel = 0): B
   const unknown1 = Buffer.alloc(1);
   const audioType = Buffer.alloc(1);
   const audioSeq = Buffer.allocUnsafe(2);
-  audioSeq.writeUInt16LE(_talkbackSeq & 0xFFFF);
+  audioSeq.writeUInt16LE(_talkbackSeq & 0xffff);
   _talkbackSeq++;
   const audioTimestamp = Buffer.alloc(8);
   audioTimestamp.writeBigUInt64LE(BigInt(_talkbackTimestamp));

@@ -31,6 +31,7 @@ import {
   DeviceDetectionStatisticsWorkingDaysProperty,
   DeviceDetectionStatisticsDetectedEventsProperty,
   DeviceDetectionStatisticsRecordedEventsProperty,
+  DeviceEnabledIndoorS350Property,
   DeviceEnabledSoloProperty,
   FloodlightT8420XDeviceProperties,
   WiredDoorbellT8200XDeviceProperties,
@@ -312,6 +313,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
         value: parsedValue,
         source: source,
       };
+
       if (this.ready) this.emit("raw property changed", this, type, this.rawProperties[type].value);
 
       const metadata = this.getPropertiesMetadata(true);
@@ -353,7 +355,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
       if (
         property.key === ParamType.PRIVATE_MODE ||
         property.key === ParamType.OPEN_DEVICE ||
-        property.key === CommandType.CMD_DEVS_SWITCH
+        property.key === CommandType.CMD_DEVS_SWITCH ||
+        property.key === CommandType.CMD_INDOOR_ENABLE_PRIVACY_MODE_S350
       ) {
         if (
           (this.isIndoorCamera() && !this.isIndoorPanAndTiltCameraS350()) ||
@@ -1600,6 +1603,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
         return "T8510P";
       } else if (property.name === PropertyName.Model && this.isLockWifiT85V0()) {
         return "T85V0";
+      } else if (property.name === PropertyName.Model && this.isLockWifiT85P0()) {
+        return "T85P0";
       } else if (property.type === "number") {
         const numericProperty = property as PropertyMetadataNumeric;
         try {
@@ -1799,7 +1804,15 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
       if (!this.isSmartDrop()) {
         //TODO: Check with future devices if this property overriding is correct (for example with indoor cameras etc.)
-        newMetadata[PropertyName.DeviceEnabled] = DeviceEnabledSoloProperty;
+        // Outdoor pan/tilt cams (eufyCam S4 etc.) report enabled state
+        // through the wrapped CMD_INDOOR_ENABLE_PRIVACY_MODE_S350 (6250)
+        // param. Binding them to DeviceEnabledSoloProperty (key=1035) here
+        // would re-anchor the read on a value the cam never updates again.
+        if (this.isOutdoorPanAndTiltCamera()) {
+          newMetadata[PropertyName.DeviceEnabled] = DeviceEnabledIndoorS350Property;
+        } else {
+          newMetadata[PropertyName.DeviceEnabled] = DeviceEnabledSoloProperty;
+        }
       }
 
       metadata = newMetadata;
@@ -1924,7 +1937,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
       type == DeviceType.INDOOR_PT_CAMERA_C220 ||
       type == DeviceType.INDOOR_PT_CAMERA_C220_V2 ||
       type == DeviceType.SOLOCAM_E42 ||
-      type == DeviceType.SMART_DROP
+      type == DeviceType.SMART_DROP ||
+      type == DeviceType.CAMERA_POE_S4
     );
   }
 
@@ -1969,6 +1983,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
       type == DeviceType.LOCK_85V0 ||
       type == DeviceType.LOCK_8502 ||
       type == DeviceType.LOCK_85L0 ||
+      type == DeviceType.LOCK_85P0 ||
       type == DeviceType.SMART_SAFE_7400 ||
       type == DeviceType.SMART_SAFE_7401 ||
       type == DeviceType.SMART_SAFE_7402 ||
@@ -1987,7 +2002,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
       type === DeviceType.STATION ||
       type === DeviceType.HB3 ||
       type === DeviceType.HOMEBASE_MINI ||
-      type === DeviceType.MINIBASE_CHIME
+      type === DeviceType.MINIBASE_CHIME ||
+      type === DeviceType.NVR_S4_MAX
     );
   }
 
@@ -1997,6 +2013,10 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   static isCameraE(type: number): boolean {
     return DeviceType.CAMERA_E == type;
+  }
+
+  static isIndoorCameraBase(type: number): boolean {
+    return DeviceType.INDOOR_CAMERA == type;
   }
 
   static isSensor(type: number): boolean {
@@ -2086,7 +2106,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
       type == DeviceType.INDOOR_PT_CAMERA_E30 ||
       type == DeviceType.INDOOR_PT_CAMERA_C210 ||
       type == DeviceType.INDOOR_PT_CAMERA_C220 ||
-      type == DeviceType.INDOOR_PT_CAMERA_C220_V2
+      type == DeviceType.INDOOR_PT_CAMERA_C220_V2 ||
+      type == DeviceType.CAMERA_POE_S4
     )
       return true;
     return false;
@@ -2145,6 +2166,11 @@ export class Device extends TypedEmitter<DeviceEvents> {
     return false;
   }
 
+  static isFloodLightT8424(type: number): boolean {
+    if (type == DeviceType.FLOODLIGHT_CAMERA_8424) return true;
+    return false;
+  }
+
   static isFloodLightT8425(type: number): boolean {
     if (type == DeviceType.FLOODLIGHT_CAMERA_8425) return true;
     return false;
@@ -2169,11 +2195,12 @@ export class Device extends TypedEmitter<DeviceEvents> {
       Device.isLockWifiR20(type) ||
       Device.isLockWifiVideo(type) ||
       Device.isLockWifiT8506(type) ||
-      Device.isLockWifiT85V0(type, "") ||
+      Device.isLockWifiT85V0(type) ||
       Device.isLockWifiT8502(type) ||
       Device.isLockWifiT85L0(type) ||
       Device.isLockWifiT8531(type) ||
-      Device.isLockWifiT85D0(type)
+      Device.isLockWifiT85D0(type) ||
+      Device.isLockWifiT85P0(type)
     );
   }
 
@@ -2208,6 +2235,11 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   static isLockWifiT85D0(type: number): boolean {
     return DeviceType.LOCK_85D0 == type;
+  }
+
+  static isLockWifiT85P0(type: number): boolean {
+    //T85P0
+    return DeviceType.LOCK_85P0 == type;
   }
 
   static isLockWifiR10(type: number): boolean {
@@ -2260,15 +2292,8 @@ export class Device extends TypedEmitter<DeviceEvents> {
     return false;
   }
 
-  static isLockWifiT85V0(type: number, serialnumber: string): boolean {
-    if (
-      type == DeviceType.LOCK_85V0 &&
-      serialnumber.startsWith("T85V0") &&
-      serialnumber.length > 6 &&
-      serialnumber.charAt(6) === "9"
-    )
-      return true;
-    return false;
+  static isLockWifiT85V0(type: number): boolean {
+    return DeviceType.LOCK_85V0 == type;
   }
 
   static isLockWifiT85L0(type: number): boolean {
@@ -2347,6 +2372,10 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   static isCameraC35(type: number): boolean {
     return DeviceType.CAMERA_C35 == type;
+  }
+
+  static isIndoorPTCameraE30(type: number): boolean {
+    return DeviceType.INDOOR_PT_CAMERA_E30 == type;
   }
 
   static isSoloCameraE30(type: number): boolean {
@@ -2558,6 +2587,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
       sn.startsWith("T8510") ||
       sn.startsWith("T8520") ||
       sn.startsWith("T85V0") ||
+      sn.startsWith("T85P0") ||
       sn.startsWith("T8500") ||
       sn.startsWith("T8501") ||
       sn.startsWith("T8503") ||
@@ -2620,8 +2650,22 @@ export class Device extends TypedEmitter<DeviceEvents> {
     return false;
   }
 
+  static isCameraPoE(type: number): boolean {
+    //T8E00
+    return DeviceType.CAMERA_POE_S4 === type;
+  }
+
+  static isNVR(type: number): boolean {
+    //T8N00
+    return DeviceType.NVR_S4_MAX === type;
+  }
+
   public isCamera(): boolean {
     return Device.isCamera(this.rawDevice.device_type);
+  }
+
+  public isIndoorCameraBase(): boolean {
+    return Device.isIndoorCameraBase(this.rawDevice.device_type);
   }
 
   public isFloodLight(): boolean {
@@ -2634,6 +2678,10 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   public isFloodLightT8423(): boolean {
     return Device.isFloodLightT8423(this.rawDevice.device_type);
+  }
+
+  public isFloodLightT8424(): boolean {
+    return Device.isFloodLightT8424(this.rawDevice.device_type);
   }
 
   public isFloodLightT8425(): boolean {
@@ -2725,11 +2773,15 @@ export class Device extends TypedEmitter<DeviceEvents> {
   }
 
   public isLockWifiT85V0(): boolean {
-    return Device.isLockWifiT85V0(this.rawDevice.device_type, this.rawDevice.device_sn);
+    return Device.isLockWifiT85V0(this.rawDevice.device_type);
   }
 
   public isLockWifiT85L0(): boolean {
     return Device.isLockWifiT85L0(this.rawDevice.device_type);
+  }
+
+  public isLockWifiT85P0(): boolean {
+    return Device.isLockWifiT85P0(this.rawDevice.device_type);
   }
 
   public isBatteryDoorbell1(): boolean {
@@ -2794,6 +2846,10 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   public isCameraC35(): boolean {
     return Device.isCameraC35(this.rawDevice.device_type);
+  }
+
+  public isIndoorPTCameraE30(): boolean {
+    return Device.isIndoorPTCameraE30(this.rawDevice.device_type);
   }
 
   public isSoloCameraE30(): boolean {
@@ -2948,6 +3004,14 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
   public isSmartTrackLink(): boolean {
     return Device.isSmartTrackLink(this.rawDevice.device_type);
+  }
+
+  public isCameraPoE(): boolean {
+    return Device.isCameraPoE(this.rawDevice.device_type);
+  }
+
+  public isNVR(): boolean {
+    return Device.isNVR(this.rawDevice.device_type);
   }
 
   public hasBattery(): boolean {

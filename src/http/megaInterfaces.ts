@@ -84,3 +84,85 @@ export interface MegaSession {
   /** Per-cluster ECDH identities (keyIdent + sharedKey + clientPublicKey). */
   identities?: Record<string, MegaIdentity>;
 }
+
+/** Member block of a v6 `house/get_devs_list` device entry (owner/share info of the calling account). */
+export interface MegaDevsListMember {
+  action_user_id: string;
+  action_user_name: string;
+  admin_user_id: string;
+  avatar: string;
+  email: string;
+  member_type: number;
+  member_user_id: string;
+  nick_name: string;
+  short_user_id: string;
+  create_time: number;
+  readonly [index: string]: unknown;
+}
+
+/** Device parameter of a v6 `house/get_devs_list` entry. Same param_type/param_value domain as the legacy API. */
+export interface MegaDevsListParam {
+  param_type: number;
+  param_value: string;
+  update_time: number;
+}
+
+/**
+ * One device entry of the v6 `house/get_devs_list` response.
+ *
+ * The v6 list is flat: hubs and their attached devices, as well as standalone devices, all appear
+ * as entries. `parent_sn` links a device to its station — standalone devices carry their own serial
+ * (`parent_sn === device_sn`) or an empty string.
+ */
+export interface MegaDevsListDevice {
+  device_sn: string;
+  parent_sn: string;
+  device_name: string;
+  device_model: string;
+  device_type: number;
+  device_channel: number;
+  p2p_did: string;
+  p2p_conn: string;
+  app_conn: string;
+  p2p_license: string;
+  local_ip: string;
+  ip_addr: string;
+  main_sw_version: string;
+  main_hw_version: string;
+  sec_sw_version: string;
+  sec_hw_version: string;
+  main_sw_time: number;
+  sec_sw_time: number;
+  software_version: string;
+  hardware_version: string;
+  wifi_ssid: string;
+  wifi_mac: string;
+  bt_mac: string;
+  time_zone: string;
+  setup_code: string;
+  setup_id: string;
+  cover_path: string;
+  cover_time: number;
+  bind_time: number;
+  create_time: number;
+  update_time: number;
+  event_num: number;
+  is_init_complete: boolean;
+  virtual_version: string;
+  house_id: string;
+  member: MegaDevsListMember;
+  params: Array<MegaDevsListParam>;
+  charging_days: number;
+  charing_total: number;
+  charging_reserve: number;
+  charging_missing: number;
+  battery_usage_last_week: number;
+  relate_devices: unknown;
+  readonly [index: string]: unknown;
+}
+
+/** Decrypted v6 `house/get_devs_list` response. */
+export interface MegaDevsListResponse {
+  devices: Array<MegaDevsListDevice>;
+  groups?: unknown;
+}

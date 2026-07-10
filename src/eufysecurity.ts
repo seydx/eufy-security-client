@@ -1123,10 +1123,16 @@ export class EufySecurity extends TypedEmitter<EufySecurityEvents> {
         rootMainLogger.error("Error in processing invitations", { error: getError(error) });
       });
     }
-    await this.api.refreshAllData().catch((err) => {
-      const error = ensureError(err);
-      rootMainLogger.error("Error during API data refreshing", { error: getError(error) });
-    });
+    if (!this.api.isConnected() && this.megaTransition.isMegaLoggedIn()) {
+      // Legacy API unavailable (captcha/tfa/passport failure) but v6 is authenticated: enumerate
+      // stations/devices from the v6 device list instead, so the app is fully usable.
+      await this.megaTransition.refreshMegaCloudData();
+    } else {
+      await this.api.refreshAllData().catch((err) => {
+        const error = ensureError(err);
+        rootMainLogger.error("Error during API data refreshing", { error: getError(error) });
+      });
+    }
     if (this.refreshEufySecurityCloudTimeout !== undefined) clearTimeout(this.refreshEufySecurityCloudTimeout);
     if (this.config.pollingIntervalMinutes > 0)
       this.refreshEufySecurityCloudTimeout = setTimeout(

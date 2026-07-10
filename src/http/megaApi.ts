@@ -24,6 +24,7 @@ import {
   MegaMqttConnectConfig,
   MegaApiOptions,
   MegaSession,
+  MegaDevsListResponse,
 } from "./megaInterfaces";
 
 export type {
@@ -34,6 +35,7 @@ export type {
   MegaMqttConnectConfig,
   MegaApiOptions,
   MegaSession,
+  MegaDevsListResponse,
 } from "./megaInterfaces";
 
 /**
@@ -580,7 +582,7 @@ export class MegaHTTPApi {
   }
 
   /** Eufy-side device list (`house/get_devs_list`), decrypted. The non-Tuya inventory. */
-  public async getDevsListDecrypted(): Promise<unknown> {
+  public async getDevsListDecrypted(): Promise<MegaDevsListResponse> {
     const host = this.clusterHost("house");
     const openapiHost = this.clusterHost("openapi");
     const identity = await this.keyExchange(openapiHost);

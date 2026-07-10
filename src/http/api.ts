@@ -869,6 +869,16 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
   public async refreshStationData(): Promise<void> {
     //Get Stations
     const stations = await this.getStationList();
+    this.updateStationData(stations);
+  }
+
+  public async refreshDeviceData(): Promise<void> {
+    //Get Devices
+    const devices = await this.getDeviceList();
+    this.updateDeviceData(devices);
+  }
+
+  public updateStationData(stations: Array<StationListResponse>): void {
     if (stations && stations.length > 0) {
       stations.forEach((element) => {
         this.hubs[element.station_sn] = element;
@@ -879,9 +889,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
     this.emit("hubs", this.hubs);
   }
 
-  public async refreshDeviceData(): Promise<void> {
-    //Get Devices
-    const devices = await this.getDeviceList();
+  public updateDeviceData(devices: Array<DeviceListResponse>): void {
     if (devices && devices.length > 0) {
       devices.forEach((element) => {
         this.devices[element.device_sn] = element;

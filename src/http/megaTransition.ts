@@ -1,5 +1,6 @@
 import { HTTPApi } from "./api";
 import { MegaHTTPApi, megaLoginHash } from "./megaApi";
+import { mapMegaDeviceToDeviceListResponse, synthesizeStationsFromMegaDevices } from "./megaMapping";
 import { rootMainLogger } from "../logging";
 import type { HTTPApiPersistentData, LoginOptions } from "./interfaces";
 import type { EufySecurityConfig, EufySecurityPersistentData } from "../interfaces";
@@ -154,6 +155,29 @@ export class MegaTransition {
     }
   }
 
+  public isMegaLoggedIn(): boolean {
+    return this.megaLoggedIn;
+  }
+
+  public async refreshMegaCloudData(): Promise<boolean> {
+    try {
+      const mega = await this.getMegaApi();
+      if (!mega.hasValidSession()) {
+        rootMainLogger.debug("v6 device list: no valid mega session, skipping refresh");
+        return false;
+      }
+      const list = await mega.getDevsListDecrypted();
+      const entries = list?.devices ?? [];
+      this.host.api.updateStationData(synthesizeStationsFromMegaDevices(entries));
+      this.host.api.updateDeviceData(entries.map(mapMegaDeviceToDeviceListResponse));
+      rootMainLogger.info(`v6 device list: populated stores from the eufy_mega backend (${entries.length} devices)`);
+      return true;
+    } catch (err) {
+      rootMainLogger.error("v6 device list refresh failed", { error: getError(ensureError(err)) });
+      return false;
+    }
+  }
+
   /**
    * Authenticate against the v6 backend.
    *  1. first call -> on `26052` triggers the email code and returns "tfa_required"; on a captcha
@@ -257,7 +281,10 @@ export class MegaTransition {
       this.pendingChallenge = undefined;
       await this.host.legacyConnect(legacyOptions);
       // legacyConnect may have recorded pendingChallenge="legacy" via the host's api-event hooks.
-      if (this.pendingChallenge === "legacy" && !this.host.api.isConnected()) return;
+      // That challenge only blocks the ready signal when v6 did not log in either: a legacy
+      // captcha/tfa/passport failure must never hold back an app that mega already authenticated
+      // (the challenge stays pending, so a later connect() with a code still reaches legacy).
+      if (this.pendingChallenge === "legacy" && !this.megaLoggedIn && !this.host.api.isConnected()) return;
     }
 
     // PHASE 3 — both backends settled. Signal the app ONCE, only if a login actually succeeded.

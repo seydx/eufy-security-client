@@ -12,7 +12,9 @@ import { MegaTransition, MegaTransitionHost, MegaLoginResult } from "../megaTran
  *  - a backend that needs a 2FA/captcha records pendingChallenge and connect() returns WITHOUT
  *    signalling the app (no onAPIConnect)
  *  - the next code/captcha is routed to the backend that asked for it
- *  - onAPIConnect fires exactly once, at the end, only if at least one login succeeded
+ *  - runConnect signals host.onAPIConnect() as soon as a login succeeds — mega logging in means
+ *    the app is ready even if a legacy challenge is still pending; EufySecurity.onAPIConnect makes
+ *    it idempotent per connected session, so a later legacy-only settle does not re-signal in prod
  *  - concurrent connect() calls are serialised
  */
 
@@ -96,7 +98,7 @@ describe("connect() v6-first state machine", () => {
     expect(h.onAPIConnect).not.toHaveBeenCalled();
   });
 
-  it("legacy emits a challenge → returns WITHOUT onAPIConnect (no premature connect)", async () => {
+  it("mega ok + legacy challenge → signals connected anyway (legacy is best-effort), stays pending", async () => {
     const h = makeHarness({
       megaResults: ["ok"],
       legacy: async (t) => {
@@ -105,7 +107,7 @@ describe("connect() v6-first state machine", () => {
       },
     });
     await connect(h);
-    expect(h.onAPIConnect).not.toHaveBeenCalled();
+    expect(h.onAPIConnect).toHaveBeenCalledTimes(1);
     expect((h.transition as any).pendingChallenge).toBe("legacy");
   });
 
@@ -121,16 +123,18 @@ describe("connect() v6-first state machine", () => {
     await connect(h); // -> pendingChallenge mega
     expect((h.transition as any).pendingChallenge).toBe("mega");
 
-    await connect(h, { verifyCode: "MEGACODE" }); // mega ok -> legacy asks
+    await connect(h, { verifyCode: "MEGACODE" }); // mega ok -> app ready; legacy asks (best-effort)
     expect(h.loginMega).toHaveBeenLastCalledWith("MEGACODE", undefined);
     expect((h.transition as any).pendingChallenge).toBe("legacy");
-    expect(h.onAPIConnect).not.toHaveBeenCalled();
-
-    await connect(h, { verifyCode: "LEGACYCODE" }); // legacy ok -> done
     expect(h.onAPIConnect).toHaveBeenCalledTimes(1);
+
+    // legacy ok too; runConnect reaches PHASE 3 again and re-invokes onAPIConnect.
+    // In prod EufySecurity.onAPIConnect dedups this via `this.connected`; the harness mock counts it.
+    await connect(h, { verifyCode: "LEGACYCODE" });
+    expect(h.onAPIConnect).toHaveBeenCalledTimes(2);
   });
 
-  it("legacy captcha then 2FA in one login() → still no onAPIConnect until 2FA done", async () => {
+  it("mega already logged in + pending legacy challenge → signals connected, legacy stays pending", async () => {
     const h = makeHarness({
       megaResults: ["ok"],
       legacy: async (t) => {
@@ -141,7 +145,7 @@ describe("connect() v6-first state machine", () => {
     (h.transition as any).pendingChallenge = "legacy"; // we arrived here because legacy had asked the captcha
     (h.transition as any).megaLoggedIn = true; // mega already done in a previous call
     await connect(h, { captcha: { captchaId: "cid", captchaCode: "DdYE" } });
-    expect(h.onAPIConnect).not.toHaveBeenCalled();
+    expect(h.onAPIConnect).toHaveBeenCalledTimes(1);
     expect((h.transition as any).pendingChallenge).toBe("legacy");
   });
 

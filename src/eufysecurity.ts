@@ -348,13 +348,19 @@ export class EufySecurity extends TypedEmitter<EufySecurityEvents> {
     // NOTE: the legacy login emitting "connect" no longer drives the app-ready signal directly —
     // connect() sequences mega + legacy and calls onAPIConnect() once at the very end (see below).
     this.api.on("connect", () => rootMainLogger.debug("Legacy API connected"));
-    // The legacy login records itself as the pending challenge so the next code/captcha is routed to it.
+    // Legacy is the best-effort second backend. Once v6 (mega) has authenticated, a legacy
+    // captcha/2FA challenge is irrelevant noise — swallow it instead of recording it or surfacing
+    // it to the consumer (otherwise it races ahead of the mega "connect" and looks like a failure).
+    // The legacy login otherwise records itself as the pending challenge so the next code/captcha
+    // is routed to it.
     this.api.on("captcha request", (id: string, captcha: string) => {
+      if (this.megaTransition.isMegaLoggedIn()) return;
       this.megaTransition.recordLegacyChallenge();
       this.onCaptchaRequest(id, captcha);
     });
     this.api.on("auth token invalidated", () => this.onAuthTokenInvalidated());
     this.api.on("tfa request", () => {
+      if (this.megaTransition.isMegaLoggedIn()) return;
       this.megaTransition.recordLegacyChallenge();
       this.onTfaRequest();
     });
@@ -1288,6 +1294,10 @@ export class EufySecurity extends TypedEmitter<EufySecurityEvents> {
   }
 
   private async onAPIConnect(): Promise<void> {
+    // Signal the app ready only once: connect() may reach PHASE 3 on several calls (e.g. mega
+    // succeeds, then a later call resolves a pending legacy challenge), but re-emitting "connect"
+    // would re-register push/MQTT. Reset happens in close()/onAPIClose(), so reconnects still work.
+    if (this.connected) return;
     this.connected = true;
     this.retries = 0;
 
